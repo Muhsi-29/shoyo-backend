@@ -205,7 +205,7 @@ export const getCustomers = async (req: Request, res: Response) => {
         prisma.user.findMany({
             where,
             select: {
-                id: true, name: true, email: true, role: true, createdAt: true,
+                id: true, name: true, email: true, role: true, createdAt: true, blockedAt: true,
                 seller: { select: { storeName: true, status: true } },
                 _count: { select: { orders: true } },
             },

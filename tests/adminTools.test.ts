@@ -108,7 +108,7 @@ describe("homepage banners", () => {
             'Added homepage banner "Up to {maxDiscount}% off"',
             'Added homepage banner "Fashion week"',
             'Added homepage banner "Coming soon"',
-            "Changed the order of the homepage banners",
+            'Reordered the homepage banners (first now: "Fashion week")',
             'Hid homepage banner "Up to {maxDiscount}% off"',
         ]);
     });

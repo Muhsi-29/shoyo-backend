@@ -43,7 +43,8 @@ app.use(pinoHttp({
 }));
 
 // Only our own frontend may call the API from a browser
-app.use(cors({ origin: CORS_ORIGINS }));
+// The admin panel reads the CSV export's file name and row count from these headers
+app.use(cors({ origin: CORS_ORIGINS, exposedHeaders: ["Content-Disposition", "X-Total-Rows"] }));
 
 // Stripe webhooks need the raw request body, so they're mounted before express.json() (and aren't rate limited)
 app.use(`${API_PREFIX}/webhook`, webhookRoutes);

@@ -179,7 +179,11 @@ export const reorderBanners = async (req: AuthenticatedRequest, res: Response) =
 
     await prisma.$transaction(ids.map((id, index) => prisma.banner.update({ where: { id }, data: { position: index + 1 } })));
     await bannersChanged();
-    await logActivity(req, { action: "banner.reordered", summary: "Changed the order of the homepage banners", targetType: "banner" });
     const banners = await prisma.banner.findMany({ orderBy: [{ position: "asc" }, { id: "asc" }] });
+    await logActivity(req, {
+        action: "banner.reordered",
+        summary: `Reordered the homepage banners (first now: "${banners[0]?.title ?? ""}")`,
+        targetType: "banner",
+    });
     res.status(200).json({ status: "success", message: "Banner order saved", data: banners.map(withStatus) });
 };
