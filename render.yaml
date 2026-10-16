@@ -1,0 +1,59 @@
+# Render Blueprint for the API: database, Redis and the API service.
+# The storefront and admin panel are separate projects with their own render.yaml (static sites).
+# To deploy: push this folder to its own GitHub repository, then in Render choose New > Blueprint and pick it.
+# Render asks for every value marked "sync: false" (see the comments for what to enter).
+
+databases:
+  - name: shoyo-db
+    databaseName: ecommerce_db
+    plan: free
+
+services:
+  # Redis for the product cache
+  - type: keyvalue
+    name: shoyo-redis
+    plan: free
+    ipAllowList: [] # Only reachable from your own Render services
+
+  # The API, built from the Dockerfile. Migrations run automatically when it starts.
+  - type: web
+    name: shoyo-api
+    runtime: docker
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: shoyo-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: shoyo-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true # Render creates a long random secret
+      - key: TRUST_PROXY
+        value: "true" # Render sits in front of the app; needed for correct rate limiting
+      - key: CLIENT_URL
+        sync: false # The storefront's URL, e.g. https://shoyo-web.onrender.com
+      - key: ADMIN_URL
+        sync: false # The admin panel's URL, e.g. https://shoyo-admin.onrender.com
+      - key: PUBLIC_BACKEND_URL
+        sync: false # This API's URL, e.g. https://shoyo-api.onrender.com (lets Stripe show product images)
+      - key: ADMIN_EMAIL
+        sync: false # The first admin account is created from these on startup
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false # Optional: card payments
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false # From a Stripe webhook pointing at https://<api>/api/v1/webhook/stripe
+      - key: RAZORPAY_KEY_ID
+        sync: false # Optional: UPI / Razorpay payments
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false # From a Razorpay webhook pointing at https://<api>/api/v1/webhook/razorpay

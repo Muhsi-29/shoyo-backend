@@ -1,0 +1,18 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/src/generated/prisma
+
+# Uploaded product images
+uploads/
+
+# Build output and emails saved locally when SMTP is not configured
+dist/
+outbox/
+.env.*
+!.env.example
+
+# Logs and test coverage
+*.log
+coverage/

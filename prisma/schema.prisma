@@ -1,0 +1,453 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Products ----------
+
+enum ProductStatus {
+  PENDING  // Listed by a seller, waiting for an admin to approve it
+  ACTIVE
+  REJECTED
+}
+
+model Product {
+  id              Int            @id @default(autoincrement())
+  title           String
+  brand           String?
+  price           Float
+  mrp             Float?         // Maximum retail price, shown crossed out when it's higher than the price
+  discountPercent Int            @default(0) // Kept in sync with price and mrp so it can be filtered and sorted on
+  description     String
+  category        String
+  image           String         // Main photo
+  images          String[]       @default([]) // More photos for the gallery
+  specs           Json?          // [{ "label": "RAM", "value": "8 GB" }, ...]
+  stock           Int
+  status          ProductStatus  @default(ACTIVE)
+  rejectionReason String?
+  sellerId        Int?           // null = sold by Shoyo itself
+  seller          Seller?        @relation(fields: [sellerId], references: [id])
+  ratingAvg       Float          @default(0)
+  ratingCount     Int            @default(0)
+  soldCount       Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  orderItems      OrderItem[]
+  cartItems       CartItem[]
+  reviews         Review[]
+  wishlistItems   WishlistItem[]
+
+  @@index([category])
+  @@index([sellerId])
+  @@index([status])
+}
+
+// ---------- Users ----------
+
+enum Role {
+  BUYER
+  SELLER
+  ADMIN
+}
+
+// What an admin can do in the admin panel
+enum StaffRole {
+  FULL     // Everything, including settings, payouts, sellers and other admins
+  SUPPORT  // Orders, returns, customers, messages and reviews
+  CATALOG  // Products, listings, reviews, coupons and the homepage
+}
+
+model User {
+  id                  Int                  @id @default(autoincrement())
+  email               String               @unique
+  password            String
+  name                String
+  role                Role                 @default(BUYER)
+  staffRole           StaffRole?           // Admins only
+  blockedAt           DateTime?            // Blocked accounts can't log in or use the API
+  blockedReason       String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  orders              Order[]
+  cartItems           CartItem[]
+  seller              Seller?
+  addresses           Address[]
+  reviews             Review[]
+  reviewVotes         ReviewVote[]
+  wishlistItems       WishlistItem[]
+  passwordResetTokens PasswordResetToken[]
+  returnRequests      ReturnRequest[]
+  couponRedemptions   CouponRedemption[]
+  adminActivities     AdminActivity[]
+}
+
+model Address {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String?  // "Home", "Work"...
+  fullName   String
+  phone      String
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  postalCode String
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique // SHA-256 of the token in the emailed link; the token itself is never stored
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// ---------- Sellers (marketplace) ----------
+
+enum SellerStatus {
+  PENDING   // Applied, waiting for an admin
+  APPROVED
+  REJECTED
+  SUSPENDED // Products are hidden until an admin reactivates the store
+}
+
+model Seller {
+  id             Int          @id @default(autoincrement())
+  userId         Int          @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storeName      String       @unique
+  slug           String       @unique
+  description    String       @default("")
+  phone          String
+  gstin          String?
+  pickupAddress  Json         // { line1, city, state, postalCode }
+  pickupPincode  String       // Used to estimate delivery times
+  payoutUpi      String       // Where the seller's earnings are sent
+  status         SellerStatus @default(PENDING)
+  statusReason   String?      // Why an application was rejected or a store suspended
+  commissionRate Float?       // Overrides the platform default when set (0.08 = 8%)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  products       Product[]
+  shipments      Shipment[]
+  payouts        Payout[]
+
+  @@index([status])
+}
+
+// Money sent to a seller (recorded by an admin after paying them)
+model Payout {
+  id        Int      @id @default(autoincrement())
+  sellerId  Int
+  seller    Seller   @relation(fields: [sellerId], references: [id])
+  amount    Float
+  reference String?  // e.g. the UPI transaction ID
+  createdAt DateTime @default(now())
+
+  @@index([sellerId])
+}
+
+// ---------- Shopping ----------
+
+model CartItem {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId     Int
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity      Int
+  savedForLater Boolean  @default(false) // "Save for later": kept, but not part of the order
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, productId]) // A product appears once per cart; adding it again raises the quantity
+}
+
+model WishlistItem {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+model Review {
+  id           Int          @id @default(autoincrement())
+  productId    Int
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId       Int
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating       Int          // 1-5 stars
+  title        String?
+  comment      String
+  helpfulCount Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  votes        ReviewVote[]
+
+  @@unique([productId, userId]) // One review per customer per product
+  @@index([productId])
+}
+
+// A "Helpful" vote on a review (one per customer)
+model ReviewVote {
+  reviewId  Int
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([reviewId, userId])
+}
+
+enum CouponType {
+  PERCENT
+  FLAT
+}
+
+model Coupon {
+  id             Int                @id @default(autoincrement())
+  code           String             @unique // Stored in capitals
+  description    String
+  type           CouponType
+  value          Float              // Percent (10 = 10%) or rupees
+  minOrderAmount Float              @default(0)
+  maxDiscount    Float?             // Cap for percentage coupons
+  usageLimit     Int?               // Total uses allowed; null = unlimited
+  usedCount      Int                @default(0)
+  active         Boolean            @default(true)
+  expiresAt      DateTime?
+  createdAt      DateTime           @default(now())
+  redemptions    CouponRedemption[]
+}
+
+// A coupon used on an order. Each customer can use a coupon once.
+model CouponRedemption {
+  id        Int      @id @default(autoincrement())
+  couponId  Int
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   Int      @unique
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([couponId, userId])
+}
+
+// ---------- Orders ----------
+
+enum OrderStatus {
+  PENDING   // Cash on delivery: placed. Online: waiting for payment.
+  PAID      // Online payment received, waiting to ship
+  SHIPPED   // Every shipment is on its way (or delivered)
+  DELIVERED // Every shipment delivered
+  CANCELLED
+}
+
+enum PaymentMethod {
+  STRIPE   // Card payment through Stripe Checkout
+  RAZORPAY // UPI, cards and net banking through Razorpay
+  COD      // Cash on delivery
+}
+
+model Order {
+  id                    Int               @id @default(autoincrement())
+  userId                Int
+  user                  User              @relation(fields: [userId], references: [id])
+  items                 OrderItem[]
+  shipments             Shipment[]
+  subtotal              Float             @default(0) // Items total before discount
+  discount              Float             @default(0) // Coupon discount
+  deliveryFee           Float             @default(0)
+  totalAmount           Float             // What the customer pays: subtotal - discount + deliveryFee
+  refundedAmount        Float             @default(0)
+  couponCode            String?
+  status                OrderStatus       @default(PENDING)
+  paymentMethod         PaymentMethod     @default(COD)
+  paidAt                DateTime?         // Online payment received, or cash collected on delivery
+  stripeSessionId       String?           @unique // Set once a Stripe Checkout session is created for this order
+  stripePaymentIntentId String?           // Needed to refund a Stripe payment
+  razorpayOrderId       String?           @unique
+  razorpayPaymentId     String?           // Needed to refund a Razorpay payment
+  shippingAddress       Json?             // { fullName, phone, line1, line2, city, state, postalCode }
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  couponRedemption      CouponRedemption?
+
+  @@index([userId])
+}
+
+enum ShipmentStatus {
+  PENDING   // Waiting for the seller to pack and ship
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+// One per seller in an order: each seller packs and ships their own items
+model Shipment {
+  id             Int            @id @default(autoincrement())
+  orderId        Int
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sellerId       Int?           // null = shipped by Shoyo
+  seller         Seller?        @relation(fields: [sellerId], references: [id])
+  items          OrderItem[]
+  status         ShipmentStatus @default(PENDING)
+  subtotal       Float          // This seller's items, before any discount
+  commissionRate Float          // Platform commission at the time of the order
+  commission     Float
+  sellerEarning  Float          // subtotal - commission
+  courier        String?
+  trackingNumber String?
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  cancelledAt    DateTime?
+  cancelReason   String?
+  sellerRating   Int?           // 1-5, given by the customer after delivery
+  sellerFeedback String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([orderId])
+  @@index([sellerId])
+}
+
+model OrderItem {
+  id            Int            @id @default(autoincrement())
+  orderId       Int
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  shipmentId    Int?
+  shipment      Shipment?      @relation(fields: [shipmentId], references: [id])
+  productId     Int
+  product       Product        @relation(fields: [productId], references: [id])
+  quantity      Int
+  price         Float          // Price of product at checkout time
+  discount      Float          @default(0) // This item's share of the order's coupon discount
+  returnRequest ReturnRequest?
+}
+
+enum ReturnStatus {
+  REQUESTED
+  REFUNDED
+  REJECTED
+}
+
+model ReturnRequest {
+  id             Int          @id @default(autoincrement())
+  orderItemId    Int          @unique
+  orderItem      OrderItem    @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  userId         Int
+  user           User         @relation(fields: [userId], references: [id])
+  reason         String
+  comment        String?
+  refundUpi      String?      // Cash-on-delivery orders: where to send the refund
+  status         ReturnStatus @default(REQUESTED)
+  refundAmount   Float
+  resolutionNote String?
+  createdAt      DateTime     @default(now())
+  resolvedAt     DateTime?
+}
+
+// ---------- Site ----------
+
+model NewsletterSubscriber {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
+model ContactMessage {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  subject   String
+  message   String
+  createdAt DateTime @default(now())
+}
+
+// ---------- Store settings, homepage and admin activity ----------
+
+// The store's rules, edited in the admin panel. Always a single row (id 1), first filled from .env.
+model StoreSettings {
+  id                    Int      @id @default(1)
+  deliveryFee           Float
+  freeDeliveryThreshold Float
+  returnWindowDays      Int
+  defaultCommissionRate Float
+  codEnabled            Boolean  @default(true)
+  stripeEnabled         Boolean  @default(true) // Card payments also need STRIPE_SECRET_KEY on the server
+  razorpayEnabled       Boolean  @default(true) // UPI payments also need the Razorpay keys
+  announcements         String[] // Lines in the storefront's offers bar
+  announceCoupons       Boolean  @default(true) // Also show active coupon codes there
+  updatedAt             DateTime @updatedAt
+}
+
+enum BannerTheme {
+  EMERALD
+  NAVY
+  PEACH
+  LAVENDER
+  ROSE
+  SKY
+}
+
+enum BannerLayout {
+  SPLIT // Words on the left, picture on the right
+  COVER // The picture fills the slide, words on top
+}
+
+// A slide in the homepage banner
+model Banner {
+  id        Int          @id @default(autoincrement())
+  eyebrow   String?      // Small label above the title, e.g. "Today's deals"
+  title     String
+  subtitle  String?
+  ctaLabel  String
+  ctaLink   String       // A storefront path, e.g. /products?category=Fashion
+  image     String?      // "/uploads/..." or a URL. Without one, popular products from the linked page are shown.
+  theme     BannerTheme  @default(EMERALD)
+  layout    BannerLayout @default(SPLIT)
+  position  Int          @default(0)
+  active    Boolean      @default(true)
+  startsAt  DateTime?    // Optional schedule
+  endsAt    DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([active, position])
+}
+
+// Who did what in the admin panel
+model AdminActivity {
+  id         Int      @id @default(autoincrement())
+  adminId    Int?
+  admin      User?    @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  adminName  String   // Kept for the record even if the account changes later
+  action     String   // e.g. "seller.approved"
+  targetType String?  // "order", "product", "seller", "customer"...
+  targetId   Int?
+  summary    String   // e.g. "Approved store Urban Trend Co."
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([adminId])
+}

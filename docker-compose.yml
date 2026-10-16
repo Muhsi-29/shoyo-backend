@@ -1,0 +1,85 @@
+# Runs the whole Shoyo stack in containers: PostgreSQL, Redis, the API, the storefront and the admin panel.
+# The three projects sit side by side:
+#
+#   Project_Resume/
+#     backend/            <- this folder (run the command from here)
+#     E-Commerce Website/ <- storefront
+#     Admin-Panel/        <- admin panel
+#
+#   docker compose up --build
+#
+# Storefront: http://localhost:8080   Admin panel: http://localhost:8081   API: http://localhost:5000/api/v1
+# Secrets (JWT_SECRET, payment keys, ADMIN_EMAIL/ADMIN_PASSWORD) are read from .env in this folder.
+# Sample products:  docker compose exec backend npx prisma db seed
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ecommerce_db
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ecommerce_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    env_file: .env
+    # These override the values in .env so the API talks to the containers above
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/ecommerce_db
+      REDIS_URL: redis://redis:6379
+      CLIENT_URL: http://localhost:8080
+      ADMIN_URL: http://localhost:8081
+      CORS_ORIGINS: http://localhost:8080,http://localhost:8081
+      PORT: "5000"
+    ports:
+      - "5000:5000"
+    volumes:
+      - uploads:/app/uploads
+      - outbox:/app/outbox
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  storefront:
+    build:
+      context: "../E-Commerce Website"
+      args:
+        VITE_API_URL: http://localhost:5000/api/v1
+        VITE_ADMIN_URL: http://localhost:8081
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+  admin:
+    build:
+      context: ../Admin-Panel
+      args:
+        VITE_API_URL: http://localhost:5000/api/v1
+        VITE_STORE_URL: http://localhost:8080
+    ports:
+      - "8081:80"
+    depends_on:
+      - backend
+
+volumes:
+  db-data:
+  uploads:
+  outbox:

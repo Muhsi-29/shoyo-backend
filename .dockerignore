@@ -1,0 +1,9 @@
+# Keep secrets, local data and build output out of the Docker image
+.env
+node_modules
+dist
+uploads
+outbox
+tests
+coverage
+*.log
