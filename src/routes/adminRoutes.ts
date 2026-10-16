@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
     getStats, getAllProductsAdmin, moderateProduct, getSellers, updateSeller, createPayout,
     getReturns, resolveReturnAdmin, getCoupons, createCoupon, updateCoupon, deleteCoupon,
-    getOrdersAdmin, exportOrdersCsv, getCustomers, getReviewsAdmin, getMessages, getSubscribers,
+    getOrdersAdmin, exportOrdersCsv, getOrderSellerOptions, getCustomers, getReviewsAdmin, getMessages, getSubscribers,
 } from "../controllers/adminController.js";
 import {
     getActivity, getAdmins, getCustomerDetail, removeAdmin, updateAdmin, updateCustomer,
@@ -23,6 +23,7 @@ router.get("/stats", can("dashboard"), getStats);                              /
 
 router.get("/orders", can("orders"), getOrdersAdmin);                          // ?status=&q=&paymentMethod=&seller=&from=&to=&page=
 router.get("/orders/export", can("orders"), exportOrdersCsv);                  // Same filters, as a CSV file
+router.get("/orders/sellers", can("orders"), getOrderSellerOptions);           // Stores, for the seller filter
 
 router.get("/customers", can("customers"), getCustomers);                      // ?q=&page=
 router.get("/customers/:id", can("customers"), getCustomerDetail);

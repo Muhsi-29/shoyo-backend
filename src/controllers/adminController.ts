@@ -143,6 +143,16 @@ export const getOrdersAdmin = async (req: Request, res: Response) => {
     res.status(200).json({ status: "success", total, page, totalPages: Math.max(1, Math.ceil(total / limit)), data: orders.map(order => forAdmin(order, returnWindowDays)) });
 };
 
+// GET /admin/orders/sellers: stores to filter orders by (open to anyone who handles orders, unlike the Sellers page)
+export const getOrderSellerOptions = async (req: Request, res: Response) => {
+    const sellers = await prisma.seller.findMany({
+        where: { status: { in: ["APPROVED", "SUSPENDED"] } },
+        select: { id: true, storeName: true },
+        orderBy: { storeName: "asc" },
+    });
+    res.status(200).json({ status: "success", data: sellers });
+};
+
 const EXPORT_LIMIT = 10_000;
 const PAYMENT_LABELS: Record<PaymentMethod, string> = { STRIPE: "Card (Stripe)", RAZORPAY: "UPI / online (Razorpay)", COD: "Cash on delivery" };
 

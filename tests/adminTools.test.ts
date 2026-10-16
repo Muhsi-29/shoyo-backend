@@ -241,6 +241,8 @@ describe("orders: filters and export", () => {
         expect(await ids("seller=shoyo")).toEqual([first.id]);
         expect(await ids("from=2026-01-15&to=2026-01-15")).toEqual([first.id]);
         expect((await api().get(`${API}/admin/orders?from=2026-02-01&to=2026-01-01`).set(admin.auth)).status).toBe(400);
+        const options = await api().get(`${API}/admin/orders/sellers`).set(admin.auth);
+        expect(options.body.data).toEqual([{ id: seller.id, storeName: seller.storeName }]);
 
         const csv = await api().get(`${API}/admin/orders/export?seller=shoyo`).set(admin.auth);
         expect(csv.headers["content-type"]).toMatch(/text\/csv/);
